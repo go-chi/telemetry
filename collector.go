@@ -33,7 +33,7 @@ func Collector(cfg Config) func(next http.Handler) http.Handler {
 
 			defer sample(time.Now().UTC(), r, ww)
 
-			if r.Method == "GET" && strings.EqualFold(r.URL.Path, "/metrics") {
+			if r.Method == "GET" && isPathIgnored(r.URL.Path) {
 				metricsHandler.Handler(next).ServeHTTP(ww, r)
 				return
 			}
@@ -42,4 +42,15 @@ func Collector(cfg Config) func(next http.Handler) http.Handler {
 		}
 		return http.HandlerFunc(fn)
 	}
+}
+
+var ignoredPaths = []string{"/metrics", "/ping"}
+
+func isPathIgnored(path string) bool {
+	for _, ignoredPath := range ignoredPaths {
+		if strings.EqualFold(path, ignoredPath) {
+			return true
+		}
+	}
+	return false
 }
