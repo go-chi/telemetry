@@ -3,10 +3,8 @@ package telemetry
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/middleware"
 	"github.com/uber-go/tally"
 	"github.com/uber-go/tally/prometheus"
 )
@@ -173,18 +171,4 @@ func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope,
 	opts.CachedReporter = reporter
 	opts.Separator = prometheus.DefaultSeparator
 	return tally.NewRootScope(opts, interval)
-}
-
-var httpMetrics = NewNamespace("http")
-
-func sample(start time.Time, r *http.Request, ww middleware.WrapResponseWriter) {
-	status := ww.Status()
-	if status == 0 {
-		status = http.StatusOK
-	}
-
-	httpMetrics.RecordDuration("request", map[string]string{
-		"endpoint": fmt.Sprintf("%s %s", r.Method, r.URL.Path),
-		"status":   fmt.Sprintf("%d", status),
-	}, start, time.Now().UTC())
 }
