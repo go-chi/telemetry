@@ -44,7 +44,7 @@ func Collector(cfg Config) func(next http.Handler) http.Handler {
 	}
 }
 
-var ignoredPaths = []string{"/metrics", "/ping"}
+var ignoredPaths = []string{"/metrics", "/ping", "/status"}
 
 func isPathIgnored(path string) bool {
 	for _, ignoredPath := range ignoredPaths {
