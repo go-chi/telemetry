@@ -29,14 +29,21 @@ func Collector(cfg Config) func(next http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
-			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-
-			defer sample(time.Now().UTC(), r, ww)
-
-			if r.Method == "GET" && isPathIgnored(r.URL.Path) {
-				metricsHandler.Handler(next).ServeHTTP(ww, r)
-				return
+			if r.Method == "GET" {
+				if isPathIgnored(r.URL.Path) {
+					next.ServeHTTP(w, r)
+					return
+				}
+				if strings.EqualFold(r.URL.Path, "/metrics") {
+					// serve metrics page
+					metricsHandler.Handler(next).ServeHTTP(w, r)
+					return
+				}
 			}
+
+			// measure request
+			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			defer sample(time.Now().UTC(), r, ww)
 
 			next.ServeHTTP(ww, r)
 		}
@@ -44,7 +51,7 @@ func Collector(cfg Config) func(next http.Handler) http.Handler {
 	}
 }
 
-var ignoredPaths = []string{"/metrics", "/ping", "/status"}
+var ignoredPaths = []string{"/ping", "/status"}
 
 func isPathIgnored(path string) bool {
 	for _, ignoredPath := range ignoredPaths {
