@@ -22,5 +22,5 @@ func sample(start time.Time, r *http.Request, ww middleware.WrapResponseWriter) 
 	}
 
 	httpMetrics.RecordDuration("request", labels, start, time.Now().UTC())
-	httpMetrics.RecordHit("request", labels)
+	httpMetrics.RecordHit("requests", labels)
 }
