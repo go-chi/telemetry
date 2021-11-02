@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -11,34 +12,56 @@ import (
 
 // Collector creates a handler that exposes a /metrics endpoint
 func Collector(cfg Config) func(next http.Handler) http.Handler {
-	if cfg.Username == "" || cfg.Password == "" {
+	if (!cfg.AllowAny && !cfg.AllowInternal) && (cfg.Username == "" || cfg.Password == "") {
 		return func(next http.Handler) http.Handler {
 			return next
 		}
 	}
 
+	authHandler := middleware.BasicAuth(
+		"metrics",
+		map[string]string{cfg.Username: cfg.Password},
+	)
+
 	metricsHandler := chi.Chain(
-		middleware.BasicAuth(
-			"metrics",
-			map[string]string{cfg.Username: cfg.Password},
-		),
+		func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+				// Maybe allow internal traffic
+				if cfg.AllowInternal {
+					ipAddress := net.ParseIP(getIPAddress(r))
+					if isPrivateSubnet(ipAddress) {
+						next.ServeHTTP(w, r)
+						return
+					}
+				}
+
+				// Maybw allow basic auth traffic
+				if cfg.Username != "" && cfg.Password != "" {
+					authHandler(next).ServeHTTP(w, r)
+					return
+				}
+
+				// Maybe allow any
+				if cfg.AllowAny {
+					next.ServeHTTP(w, r)
+					return
+				}
+
+				w.WriteHeader(http.StatusNotFound)
+			})
+		},
 		func(http.Handler) http.Handler {
 			return reporter.HTTPHandler()
 		},
 	)
 
 	return func(next http.Handler) http.Handler {
-		fn := func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				if isPathIgnored(r.URL.Path) {
-					next.ServeHTTP(w, r)
-					return
-				}
-				if strings.EqualFold(r.URL.Path, "/metrics") {
-					// serve metrics page
-					metricsHandler.Handler(next).ServeHTTP(w, r)
-					return
-				}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" && strings.EqualFold(r.URL.Path, "/metrics") {
+				// serve metrics page
+				metricsHandler.Handler(next).ServeHTTP(w, r)
+				return
 			}
 
 			// measure request
@@ -46,18 +69,6 @@ func Collector(cfg Config) func(next http.Handler) http.Handler {
 			defer sample(time.Now().UTC(), r, ww)
 
 			next.ServeHTTP(ww, r)
-		}
-		return http.HandlerFunc(fn)
+		})
 	}
-}
-
-var ignoredPaths = []string{"/ping", "/status"}
-
-func isPathIgnored(path string) bool {
-	for _, ignoredPath := range ignoredPaths {
-		if strings.EqualFold(path, ignoredPath) {
-			return true
-		}
-	}
-	return false
 }
