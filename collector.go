@@ -28,10 +28,6 @@ func Collector(cfg Config) func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 				// Maybe allow internal traffic
-
-				// TODO/NOTE: we've seen in some cases on GCP internal traffic is being blocked, therefore
-				// our checks for ip parsing and checking against a private subnet has a minor bug
-
 				if cfg.AllowInternal {
 					ipAddress := net.ParseIP(getIPAddress(r))
 					if isPrivateSubnet(ipAddress) {
