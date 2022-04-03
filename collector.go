@@ -77,7 +77,7 @@ func Collector(cfg Config, optPathPrefixFilters ...[]string) func(next http.Hand
 			if len(pathPrefixFilters) > 0 {
 				found := false
 				for _, p := range pathPrefixFilters {
-					if strings.EqualFold(r.URL.Path, p) {
+					if strings.HasPrefix(r.URL.Path, p) {
 						found = true
 						break
 					}
