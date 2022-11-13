@@ -1,4 +1,4 @@
-module github.com/goware/telemetry
+module github.com/go-chi/telemetry
 
 go 1.16
 
