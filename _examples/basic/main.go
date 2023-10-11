@@ -21,7 +21,7 @@ func (m *MyAppMetrics) RecordMyAppHit() {
 	m.RecordHit("my_app_hit", nil)
 }
 
-func (m *MyAppMetrics) RecordAppGuage(value float64) {
+func (m *MyAppMetrics) RecordAppGauge(value float64) {
 	m.RecordGauge("my_app_gauge", nil, value)
 }
 
@@ -42,16 +42,16 @@ func main() {
 			AppMetrics.RecordMyAppHit()
 			w.Write([]byte("Hit recorded!"))
 		})
-		r.Get("/guage/{value}", func(w http.ResponseWriter, r *http.Request) {
+		r.Get("/gauge/{value}", func(w http.ResponseWriter, r *http.Request) {
 			value := chi.URLParam(r, "value")
 			floatValue, err := strconv.ParseFloat(value, 64)
 			if err != nil {
 				w.Write([]byte("Invalid value"))
 				return
 			}
-			// record a guage
-			AppMetrics.RecordAppGuage(floatValue)
-			w.Write([]byte("Guage recorded!"))
+			// record a gauge
+			AppMetrics.RecordAppGauge(floatValue)
+			w.Write([]byte("Gauge recorded!"))
 		})
 	})
 
