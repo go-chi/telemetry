@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-var httpMetrics = NewNamespace("http")
+var httpMetrics = NewScope("http")
 
 func sample(start time.Time, r *http.Request, ww middleware.WrapResponseWriter) {
 	status := ww.Status()

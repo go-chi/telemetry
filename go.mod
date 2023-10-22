@@ -1,20 +1,23 @@
 module github.com/go-chi/telemetry
 
-go 1.16
+go 1.19
+
+require (
+	github.com/go-chi/chi/v5 v5.0.10
+	github.com/uber-go/tally/v4 v4.1.10
+)
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/go-chi/chi/v5 v5.0.7
-	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/m3db/prometheus_client_golang v0.8.1 // indirect
-	github.com/m3db/prometheus_client_model v0.1.0 // indirect
-	github.com/m3db/prometheus_common v0.1.0 // indirect
-	github.com/m3db/prometheus_procfs v0.8.1 // indirect
-	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/stretchr/testify v1.7.0 // indirect
-	github.com/twmb/murmur3 v1.1.6 // indirect
-	github.com/uber-go/tally v3.4.3+incompatible
-	go.uber.org/atomic v1.9.0 // indirect
-	google.golang.org/protobuf v1.28.0 // indirect
+	github.com/prometheus/client_golang v1.17.0 // indirect
+	github.com/prometheus/client_model v0.5.0 // indirect
+	github.com/prometheus/common v0.45.0 // indirect
+	github.com/prometheus/procfs v0.12.0 // indirect
+	github.com/twmb/murmur3 v1.1.8 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
+	google.golang.org/protobuf v1.31.0 // indirect
 )

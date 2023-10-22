@@ -10,11 +10,11 @@ import (
 )
 
 var (
-	AppMetrics = &MyAppMetrics{telemetry.NewNamespace("app")}
+	AppMetrics = &MyAppMetrics{telemetry.NewScope("app")}
 )
 
 type MyAppMetrics struct {
-	*telemetry.Namespace
+	*telemetry.Scope
 }
 
 func (m *MyAppMetrics) RecordMyAppHit() {
@@ -29,9 +29,12 @@ func main() {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
+
+	// telemetry.Collector middleware mounts /metrics endpoint
+	// with prometheus metrics collector.
 	r.Use(telemetry.Collector(telemetry.Config{
 		AllowAny: true,
-	}, []string{"/api"})) // path prefix filters basically records generic http request metrics
+	}, []string{"/api"})) // path prefix filters records generic http request metrics
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/hello", func(w http.ResponseWriter, r *http.Request) {

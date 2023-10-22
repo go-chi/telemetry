@@ -5,8 +5,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/uber-go/tally"
-	"github.com/uber-go/tally/prometheus"
+	"github.com/uber-go/tally/v4"
+	"github.com/uber-go/tally/v4/prometheus"
 )
 
 var reporter = prometheus.NewReporter(prometheus.Options{})
@@ -43,26 +43,26 @@ var defaultBucketFactorsForDurations = []float64{
 	100,
 }
 
-// Namespace represents the measurements scope for an application.
-type Namespace struct {
+// Scope represents the measurements scope for an application.
+type Scope struct {
 	scope  tally.Scope
 	closer io.Closer
 }
 
-// NewNamespace creates a namespace for an application. Receives a namespace
+// NewScope creates a scope for an application. Receives a scope
 // argument (a single-word) that is used as a prefix for all measurements.
-func NewNamespace(namespace string) *Namespace {
-	scope, closer := newRootScope(tally.ScopeOptions{
-		Prefix: namespace,
+func NewScope(scope string) *Scope {
+	s, closer := newRootScope(tally.ScopeOptions{
+		Prefix: scope,
 	}, 1*time.Second)
-	return &Namespace{
-		scope:  scope,
+	return &Scope{
+		scope:  s,
 		closer: closer,
 	}
 }
 
-// Close closes the namespace and stops reporting.
-func (n *Namespace) Close() error {
+// Close closes the scope and stops reporting.
+func (n *Scope) Close() error {
 	return n.closer.Close()
 }
 
@@ -70,7 +70,7 @@ func (n *Namespace) Close() error {
 // or other events that are incremented by one each time.
 //
 // RecordHit adds the "_total" suffix to the name of the measurement.
-func (n *Namespace) RecordHit(measurement string, tags map[string]string) {
+func (n *Scope) RecordHit(measurement string, tags map[string]string) {
 	record := n.scope.Tagged(tags).Counter(fmt.Sprintf(measurement + "_total"))
 	record.Inc(1.0)
 }
@@ -80,7 +80,7 @@ func (n *Namespace) RecordHit(measurement string, tags map[string]string) {
 //
 // RecordGauge measures a prometheus raw type and no suffix is added to the
 // measurement.
-func (n *Namespace) RecordGauge(measurement string, tags map[string]string, value float64) {
+func (n *Scope) RecordGauge(measurement string, tags map[string]string, value float64) {
 	record := n.scope.Tagged(tags).Gauge(measurement)
 	record.Update(value)
 }
@@ -90,7 +90,7 @@ func (n *Namespace) RecordGauge(measurement string, tags map[string]string, valu
 // to measure things like the size of a queue.
 //
 // RecordSize adds the "_size" prefix to the name of the measurement.
-func (n *Namespace) RecordSize(measurement string, tags map[string]string, value float64) {
+func (n *Scope) RecordSize(measurement string, tags map[string]string, value float64) {
 	n.RecordGauge(fmt.Sprintf(measurement+"_size"), tags, value)
 }
 
@@ -99,7 +99,7 @@ func (n *Namespace) RecordSize(measurement string, tags map[string]string, value
 //
 // RecordIntegerValue uses an histogram configured with buckets that priorize
 // values closer to zero.
-func (n *Namespace) RecordIntegerValue(measurement string, tags map[string]string, value int) {
+func (n *Scope) RecordIntegerValue(measurement string, tags map[string]string, value int) {
 	record := n.scope.Tagged(tags).
 		Histogram(fmt.Sprintf(measurement+"_value"), defaultBucketsForIntegerValues)
 	record.RecordValue(float64(value))
@@ -109,7 +109,7 @@ func (n *Namespace) RecordIntegerValue(measurement string, tags map[string]strin
 // when is important to see how the value evolved over time.
 //
 // RecordValue measures a prometheus raw type and no suffix is added to the measurement.
-func (n *Namespace) RecordValue(measurement string, tags map[string]string, value float64) {
+func (n *Scope) RecordValue(measurement string, tags map[string]string, value float64) {
 	n.RecordValueWithBuckets(measurement, tags, value, nil)
 }
 
@@ -117,7 +117,7 @@ func (n *Namespace) RecordValue(measurement string, tags map[string]string, valu
 // down. Use it when is important to see how the value evolved over time.
 //
 // RecordValueWithBuckets adds the "_value" suffix to the name of the measurement.
-func (n *Namespace) RecordValueWithBuckets(measurement string, tags map[string]string, value float64, buckets []float64) {
+func (n *Scope) RecordValueWithBuckets(measurement string, tags map[string]string, value float64, buckets []float64) {
 	record := n.scope.Tagged(tags).
 		Histogram(fmt.Sprintf(measurement+"_value"), tally.ValueBuckets(buckets))
 	record.RecordValue(value)
@@ -129,7 +129,7 @@ func (n *Namespace) RecordValueWithBuckets(measurement string, tags map[string]s
 //
 // RecordDuration adds the "_duration_seconds" prefix to the name of the
 // measurement.
-func (n *Namespace) RecordDuration(measurement string, tags map[string]string, start time.Time, stop time.Time) {
+func (n *Scope) RecordDuration(measurement string, tags map[string]string, start time.Time, stop time.Time) {
 	n.RecordDurationWithResolution(measurement, tags, start, stop, 0)
 }
 
@@ -142,7 +142,7 @@ func (n *Namespace) RecordDuration(measurement string, tags map[string]string, s
 //
 // RecordDurationWithResolution adds the "_duration_seconds" prefix to the name
 // of the measurement.
-func (n *Namespace) RecordDurationWithResolution(measurement string, tags map[string]string, timeA time.Time, timeB time.Time, resolution time.Duration) {
+func (n *Scope) RecordDurationWithResolution(measurement string, tags map[string]string, timeA time.Time, timeB time.Time, resolution time.Duration) {
 	var buckets tally.Buckets
 
 	if resolution <= 0 {
