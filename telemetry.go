@@ -75,6 +75,15 @@ func (n *Scope) RecordHit(measurement string, tags map[string]string) {
 	record.Inc(1.0)
 }
 
+// RecordHitN increases a hit counter by given value. This is ideal for counting HTTP requests
+// or other events that are incremented by one each time.
+//
+// RecordHit adds the "_total" suffix to the name of the measurement.
+func (n *Scope) RecordHitN(measurement string, tags map[string]string, value int64) {
+	record := n.scope.Tagged(tags).Counter(fmt.Sprintf(measurement + "_total"))
+	record.Inc(value)
+}
+
 // RecordGauge sets the value of a measurement that can go up or down over
 // time.
 //
