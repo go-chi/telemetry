@@ -22,9 +22,7 @@ func Collector(cfg Config, optPathPrefixFilters ...[]string) func(next http.Hand
 
 	pathPrefixFilters := []string{}
 	if len(optPathPrefixFilters) > 0 {
-		for _, v := range optPathPrefixFilters[0] {
-			pathPrefixFilters = append(pathPrefixFilters, v)
-		}
+		pathPrefixFilters = append(pathPrefixFilters, optPathPrefixFilters[0]...)
 	}
 
 	authHandler := middleware.BasicAuth(
@@ -35,7 +33,6 @@ func Collector(cfg Config, optPathPrefixFilters ...[]string) func(next http.Hand
 	metricsHandler := chi.Chain(
 		func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 				// Maybe allow internal traffic
 				if cfg.AllowInternal {
 					ipAddress := net.ParseIP(getIPAddress(r))
@@ -65,9 +62,19 @@ func Collector(cfg Config, optPathPrefixFilters ...[]string) func(next http.Hand
 		},
 	)
 
+	metricsPath := cfg.HTTPPath
+
+	if s := strings.Trim(cfg.HTTPPath, " "); len(s) > 0 {
+		if s[0] != '/' {
+			s = "/" + s
+		}
+
+		metricsPath = s
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" && strings.EqualFold(r.URL.Path, "/metrics") {
+			if r.Method == "GET" && strings.EqualFold(r.URL.Path, metricsPath) {
 				// serve metrics page
 				metricsHandler.Handler(next).ServeHTTP(w, r)
 				return

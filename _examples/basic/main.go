@@ -9,9 +9,7 @@ import (
 	"github.com/go-chi/telemetry"
 )
 
-var (
-	AppMetrics = &MyAppMetrics{telemetry.NewScope("app")}
-)
+var AppMetrics = &MyAppMetrics{telemetry.NewScope("app")}
 
 type MyAppMetrics struct {
 	*telemetry.Scope
@@ -34,6 +32,7 @@ func main() {
 	// with prometheus metrics collector.
 	r.Use(telemetry.Collector(telemetry.Config{
 		AllowAny: true,
+		HTTPPath: "/metrics",
 	}, []string{"/api"})) // path prefix filters records generic http request metrics
 
 	r.Route("/api", func(r chi.Router) {
