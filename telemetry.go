@@ -75,6 +75,11 @@ func (n *Scope) RecordHit(measurement string, tags map[string]string) {
 	record.Inc(1.0)
 }
 
+func (n *Scope) RecordIncrementValue(measurement string, tags map[string]string, value int64) {
+	record := n.scope.Tagged(tags).Counter(fmt.Sprintf(measurement + "_total"))
+	record.Inc(value)
+}
+
 // RecordGauge sets the value of a measurement that can go up or down over
 // time.
 //
