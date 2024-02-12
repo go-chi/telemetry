@@ -64,7 +64,14 @@ func Collector(cfg Config, optPathPrefixFilters ...[]string) func(next http.Hand
 
 	metricsPath := cfg.HTTPPath
 
-	if s := strings.Trim(cfg.HTTPPath, " "); len(s) > 0 {
+	switch len(strings.Trim(metricsPath, "")) {
+
+	case 0:
+		metricsPath = "/metrics"
+	default:
+
+		s := metricsPath
+
 		if s[0] != '/' {
 			s = "/" + s
 		}
