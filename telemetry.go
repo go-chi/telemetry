@@ -176,5 +176,6 @@ func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope,
 	opts.CachedReporter = reporter
 	opts.Separator = prometheus.DefaultSeparator
 	opts.SanitizeOptions = &prometheus.DefaultSanitizerOpts
+	opts.OmitCardinalityMetrics = true
 	return tally.NewRootScope(opts, interval)
 }
