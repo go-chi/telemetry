@@ -175,5 +175,6 @@ func (n *Scope) RecordDurationWithResolution(measurement string, tags map[string
 func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope, io.Closer) {
 	opts.CachedReporter = reporter
 	opts.Separator = prometheus.DefaultSeparator
+	opts.SanitizeOptions = &prometheus.DefaultSanitizerOpts
 	return tally.NewRootScope(opts, interval)
 }
