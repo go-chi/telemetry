@@ -12,4 +12,8 @@ type Config struct {
 
 	// Allow internal private subnet traffic
 	AllowInternal bool `toml:"allow_internal"`
+
+	// Defines the path the metrics data would be mounted.
+	// If not provided, it defaults to /metrics
+	HTTPPath string `toml:"http_path"`
 }

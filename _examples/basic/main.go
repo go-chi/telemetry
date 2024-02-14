@@ -14,9 +14,7 @@ import (
 	"github.com/go-chi/telemetry"
 )
 
-var (
-	AppMetrics = &MyAppMetrics{telemetry.NewScope("app")}
-)
+var AppMetrics = &MyAppMetrics{telemetry.NewScope("app")}
 
 type MyAppMetrics struct {
 	*telemetry.Scope
