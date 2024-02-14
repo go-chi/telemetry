@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -58,5 +63,30 @@ func main() {
 		})
 	})
 
-	http.ListenAndServe("localhost:3000", r)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	srvAddr := "localhost:3000"
+	srv := &http.Server{
+		Addr:    srvAddr,
+		Handler: r,
+	}
+
+	go func() {
+		<-sig
+
+		slog.Info("server is shutting down")
+
+		err := srv.Shutdown(context.Background())
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	slog.Info("server is running on", "address", srvAddr)
+
+	err := srv.ListenAndServe()
+	if err != nil && err != http.ErrServerClosed {
+		panic(err)
+	}
 }
