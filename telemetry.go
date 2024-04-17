@@ -172,6 +172,10 @@ func (n *Scope) RecordDurationWithResolution(measurement string, tags map[string
 	record.RecordDuration(elapsed)
 }
 
+func (n *Scope) RecordSpan(measurement string, tags map[string]string) tally.Stopwatch {
+	return n.scope.Timer(measurement + "_span").Start()
+}
+
 func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope, io.Closer) {
 	opts.CachedReporter = reporter
 	opts.Separator = prometheus.DefaultSeparator
