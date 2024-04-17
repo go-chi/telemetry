@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -60,6 +62,15 @@ func main() {
 			// record a gauge
 			AppMetrics.RecordAppGauge(floatValue)
 			w.Write([]byte("Gauge recorded!"))
+		})
+		r.Get("/compute", func(w http.ResponseWriter, r *http.Request) {
+			span := AppMetrics.RecordSpan("compute", nil)
+			defer span.Stop()
+
+			// do random work for random tie,,
+			time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
+
+			w.Write([]byte("Span recorded!"))
 		})
 	})
 
