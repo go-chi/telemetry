@@ -6,14 +6,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 )
 
 // Collector creates a handler that exposes a /metrics endpoint. Passing
 // an array of strings to pathPrefixFilters will help reduce the noise on the service
 // from random Internet traffic; that is, only the path prefixes will be measured.
 func Collector(cfg Config, optPathPrefixFilters ...[]string) func(next http.Handler) http.Handler {
+	if cfg.AsteriskAltenative == "" {
+		cfg.AsteriskAltenative = "XXX"
+	}
+
 	if (!cfg.AllowAny && !cfg.AllowInternal) && (cfg.Username == "" || cfg.Password == "") {
 		return func(next http.Handler) http.Handler {
 			return next
@@ -91,7 +95,7 @@ func Collector(cfg Config, optPathPrefixFilters ...[]string) func(next http.Hand
 
 			// measure request
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			defer sample(time.Now().UTC(), r, ww)
+			defer sample(time.Now().UTC(), cfg.AsteriskAltenative, r, ww)
 
 			next.ServeHTTP(ww, r)
 		})

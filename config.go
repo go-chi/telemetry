@@ -12,4 +12,7 @@ type Config struct {
 
 	// Allow internal private subnet traffic
 	AllowInternal bool `toml:"allow_internal"`
+
+	// If the path contains an asterisk, replace it with this string.
+	AsteriskAltenative string `toml:"asterisk_alternative"`
 }
