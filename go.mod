@@ -1,4 +1,4 @@
-module github.com/go-chi/telemetry
+module github.com/tetsuya28/telemetry
 
 go 1.22
 

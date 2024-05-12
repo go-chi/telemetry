@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/telemetry"
 )
 
@@ -40,7 +40,7 @@ func main() {
 	// telemetry.Collector middleware mounts /metrics endpoint
 	// with prometheus metrics collector.
 	r.Use(telemetry.Collector(telemetry.Config{
-		AllowAny: true,
+		AllowInternal: true,
 		AsteriskAltenative: "XXX",
 	}, []string{"/api"})) // path prefix filters records generic http request metrics
 

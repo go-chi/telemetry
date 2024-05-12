@@ -8,6 +8,15 @@ Checkout the [example](_examples/basic/main.go) for more details.
 
 Compatible with chi v4.
 
+## Usage
+```go
+r := chi.NewRouter()
+r.Use(telemetry.Collector(telemetry.Config{
+	AllowAny: true,
+	AsteriskAltenative: "XXX",
+}, []string{"/api"})) // path prefix filters records generic http request metrics
+```
+
 ## Example
 ```go
 r.Route("/api/users", func(r chi.Router) {
