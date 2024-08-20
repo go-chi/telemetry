@@ -173,7 +173,8 @@ func (n *Scope) RecordDurationWithResolution(measurement string, tags map[string
 }
 
 func (n *Scope) RecordSpan(measurement string, tags map[string]string) tally.Stopwatch {
-	return n.scope.Timer(measurement + "_span").Start()
+	record := n.scope.Tagged(tags).Timer(fmt.Sprintf(measurement + "_span"))
+	return record.Start()
 }
 
 func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope, io.Closer) {
