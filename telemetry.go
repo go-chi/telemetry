@@ -72,12 +72,12 @@ func (n *Scope) Close() error {
 //
 // RecordHit adds the "_total" suffix to the name of the measurement.
 func (n *Scope) RecordHit(measurement string, tags map[string]string) {
-	record := n.scope.Tagged(tags).Counter(fmt.Sprintf(measurement + "_total"))
+	record := n.scope.Tagged(tags).Counter(SnakeCasef(measurement + "_total"))
 	record.Inc(1.0)
 }
 
 func (n *Scope) RecordIncrementValue(measurement string, tags map[string]string, value int64) {
-	record := n.scope.Tagged(tags).Counter(fmt.Sprintf(measurement + "_total"))
+	record := n.scope.Tagged(tags).Counter(SnakeCasef(measurement + "_total"))
 	record.Inc(value)
 }
 
@@ -87,7 +87,7 @@ func (n *Scope) RecordIncrementValue(measurement string, tags map[string]string,
 // RecordGauge measures a prometheus raw type and no suffix is added to the
 // measurement.
 func (n *Scope) RecordGauge(measurement string, tags map[string]string, value float64) {
-	record := n.scope.Tagged(tags).Gauge(measurement)
+	record := n.scope.Tagged(tags).Gauge(SnakeCasef(measurement))
 	record.Update(value)
 }
 
@@ -97,7 +97,7 @@ func (n *Scope) RecordGauge(measurement string, tags map[string]string, value fl
 //
 // RecordSize adds the "_size" prefix to the name of the measurement.
 func (n *Scope) RecordSize(measurement string, tags map[string]string, value float64) {
-	n.RecordGauge(fmt.Sprintf(measurement+"_size"), tags, value)
+	n.RecordGauge(SnakeCasef(measurement+"_size"), tags, value)
 }
 
 // RecordIntegerValue records a numeric unit-less value that can go up or down.
@@ -107,7 +107,7 @@ func (n *Scope) RecordSize(measurement string, tags map[string]string, value flo
 // values closer to zero.
 func (n *Scope) RecordIntegerValue(measurement string, tags map[string]string, value int) {
 	record := n.scope.Tagged(tags).
-		Histogram(fmt.Sprintf(measurement+"_value"), defaultBucketsForIntegerValues)
+		Histogram(SnakeCasef(measurement+"_value"), defaultBucketsForIntegerValues)
 	record.RecordValue(float64(value))
 }
 
@@ -116,7 +116,7 @@ func (n *Scope) RecordIntegerValue(measurement string, tags map[string]string, v
 //
 // RecordValue measures a prometheus raw type and no suffix is added to the measurement.
 func (n *Scope) RecordValue(measurement string, tags map[string]string, value float64) {
-	n.RecordValueWithBuckets(measurement, tags, value, nil)
+	n.RecordValueWithBuckets(SnakeCasef(measurement), tags, value, nil)
 }
 
 // RecordValueWithBuckets records a numeric unit-less value that can go up or
@@ -125,7 +125,7 @@ func (n *Scope) RecordValue(measurement string, tags map[string]string, value fl
 // RecordValueWithBuckets adds the "_value" suffix to the name of the measurement.
 func (n *Scope) RecordValueWithBuckets(measurement string, tags map[string]string, value float64, buckets []float64) {
 	record := n.scope.Tagged(tags).
-		Histogram(fmt.Sprintf(measurement+"_value"), tally.ValueBuckets(buckets))
+		Histogram(SnakeCasef(measurement+"_value"), tally.ValueBuckets(buckets))
 	record.RecordValue(value)
 }
 
@@ -136,7 +136,7 @@ func (n *Scope) RecordValueWithBuckets(measurement string, tags map[string]strin
 // RecordDuration adds the "_duration_seconds" prefix to the name of the
 // measurement.
 func (n *Scope) RecordDuration(measurement string, tags map[string]string, start time.Time, stop time.Time) {
-	n.RecordDurationWithResolution(measurement, tags, start, stop, 0)
+	n.RecordDurationWithResolution(SnakeCasef(measurement), tags, start, stop, 0)
 }
 
 // RecordDurationWithResolution records the elapsed duration between two time
@@ -163,7 +163,7 @@ func (n *Scope) RecordDurationWithResolution(measurement string, tags map[string
 	buckets = tally.DurationBuckets(durations)
 
 	record := n.scope.Tagged(tags).Histogram(
-		fmt.Sprintf(measurement+"_duration_seconds"),
+		SnakeCasef(measurement+"_duration_seconds"),
 		buckets,
 	)
 	elapsed := timeB.Sub(timeA)
@@ -174,7 +174,7 @@ func (n *Scope) RecordDurationWithResolution(measurement string, tags map[string
 }
 
 func (n *Scope) RecordSpan(measurement string, tags map[string]string) tally.Stopwatch {
-	return n.scope.Timer(measurement + "_span").Start()
+	return n.scope.Timer(SnakeCasef(measurement + "_span")).Start()
 }
 
 func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope, io.Closer) {
