@@ -3,6 +3,7 @@ package telemetry
 import (
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/uber-go/tally/v4"
@@ -182,4 +183,12 @@ func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope,
 	opts.SanitizeOptions = &prometheus.DefaultSanitizerOpts
 	opts.OmitCardinalityMetrics = true
 	return tally.NewRootScope(opts, interval)
+}
+
+func SnakeCasef(format string, args ...any) string {
+	if strings.Contains(format, "-") || strings.Contains(format, " ") {
+		return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf(format, args...), " ", "_"), "-", "_"))
+	} else {
+		return fmt.Sprintf(format, args...)
+	}
 }
