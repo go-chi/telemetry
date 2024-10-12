@@ -186,9 +186,16 @@ func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope,
 }
 
 func SnakeCasef(format string, args ...any) string {
-	if strings.Contains(format, "-") || strings.Contains(format, " ") {
-		return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf(format, args...), " ", "_"), "-", "_"))
-	} else {
-		return fmt.Sprintf(format, args...)
+	// TODO: memoize..?
+	s := strings.ToLower(fmt.Sprintf(format, args...))
+	if strings.Contains(s, "-") {
+		s = strings.ReplaceAll(s, "-", "_")
 	}
+	if strings.Contains(s, " ") {
+		s = strings.ReplaceAll(s, " ", "_")
+	}
+	if strings.Contains(s, ".") {
+		s = strings.ReplaceAll(s, ".", "_")
+	}
+	return s
 }
