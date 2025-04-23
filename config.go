@@ -12,6 +12,10 @@ type Config struct {
 
 	// Allow internal private subnet traffic
 	AllowInternal bool `toml:"allow_internal"`
+
+	// Useful when exposing the metrics endpoint on a separate server,
+	// then the ones from we collect metrics
+	CollectHttpRequestMetrics bool `toml:"collect_http_request_metrics"`
 }
 
 func (a Config) Creds() map[string]string {

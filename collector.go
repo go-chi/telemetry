@@ -10,11 +10,24 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// Gives ability to exposes metrics on a separate http server.
+// Example usage to expose `/metrics` endpoint on port `9093` using go std lib http server:
+//
+//	metricsServer := http.NewServeMux()
+//	metricsServer.Handle("/metrics", telemetry.MetricsHandler())
+//	err := http.ListenAndServe(":9093", metricsServer)
+//
+// If you want to also collect http request details as metrics,
+// please remember to configure it by setting Config.CollectHttpRequestMetrics to true
+func MetricsHandler() http.Handler {
+	return reporter.HTTPHandler()
+}
+
 // Collector creates a handler that exposes a /metrics endpoint. Passing
 // an array of strings to pathPrefixFilters will help reduce the noise on the service
 // from random Internet traffic; that is, only the path prefixes will be measured.
 func Collector(cfg Config, optPathPrefixFilters ...[]string) func(next http.Handler) http.Handler {
-	if (!cfg.AllowAny && !cfg.AllowInternal) && (cfg.Username == "" || cfg.Password == "") {
+	if (!cfg.AllowAny && !cfg.AllowInternal && !cfg.CollectHttpRequestMetrics) && (cfg.Username == "" || cfg.Password == "") {
 		return func(next http.Handler) http.Handler {
 			return next
 		}
