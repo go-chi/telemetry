@@ -13,3 +13,11 @@ type Config struct {
 	// Allow internal private subnet traffic
 	AllowInternal bool `toml:"allow_internal"`
 }
+
+func (a Config) Creds() map[string]string {
+	creds := map[string]string{}
+	if a.Username != "" && a.Password != "" {
+		creds[a.Username] = a.Password
+	}
+	return creds
+}
