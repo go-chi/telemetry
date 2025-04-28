@@ -4,12 +4,16 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/prometheus"
 )
 
+// reporter is the global prometheus reporter, which will also register
+// the metrics with the prometheus registry. The Collector middleware will
+// use this reporter to expose the metrics on the /metrics endpoint.
 var reporter = prometheus.NewReporter(prometheus.Options{})
 
 var defaultBucketsForIntegerValues = tally.ValueBuckets{
@@ -48,18 +52,82 @@ var defaultBucketFactorsForDurations = []float64{
 type Scope struct {
 	scope  tally.Scope
 	closer io.Closer
+	cache  scopeCache
 }
 
 // NewScope creates a scope for an application. Receives a scope
 // argument (a single-word) that is used as a prefix for all measurements.
-func NewScope(scope string) *Scope {
+// Optionally you can pass a map of tags to be used for all measurements in
+// the scope.
+func NewScope(scope string, optTags ...map[string]string) *Scope {
+	var tags map[string]string = nil
+	if len(optTags) > 0 {
+		tags = optTags[0]
+	}
+
 	s, closer := newRootScope(tally.ScopeOptions{
 		Prefix: scope,
+		Tags:   tags,
 	}, 1*time.Second)
+
 	return &Scope{
 		scope:  s,
 		closer: closer,
 	}
+}
+
+// WithTaggedMap returns a new scope with the given tags. However, if this is a
+// hot-path (and telemetry usually is), we recommend using GetTaggedScope
+// and SetTaggedScope to avoid the overhead of creating a new scope.
+func (n *Scope) WithTaggedMap(tags map[string]string) *Scope {
+	return &Scope{
+		scope:  n.scope.Tagged(tags),
+		closer: n.closer,
+	}
+}
+
+// Tagged returns a tagged scope for the tag name and value pair. It's very
+// efficient as it will return a cached scope if it exists for the tagged
+// scope, or it will create a new scope and cache it based on tag name + value.
+// If either tagName or tagValue is empty, it will return the current scope.
+func (n *Scope) Tagged(tagName, tagValue string) *Scope {
+	if tagName == "" || tagValue == "" {
+		return n
+	}
+	scope, _ := n.GetTaggedScope(tagName)
+	if scope == nil {
+		scope = n.SetTaggedScope(tagName, map[string]string{tagName: tagValue})
+	}
+	return scope
+}
+
+// GetTaggedScope returns a new scope with the given tags based on the
+// supplied key identifer.
+func (n *Scope) GetTaggedScope(key string) (*Scope, bool) {
+	var scope *Scope
+	var ok bool
+	n.cache.taggedMu.RLock()
+	if n.cache.tagged != nil {
+		scope, ok = n.cache.tagged[key]
+	}
+	n.cache.taggedMu.RUnlock()
+	return scope, ok
+}
+
+// SetTaggedScope returns a new scope with the given tags based on the
+// supplied key identifer.
+func (n *Scope) SetTaggedScope(key string, tags map[string]string) *Scope {
+	s := &Scope{
+		scope:  n.scope.Tagged(tags),
+		closer: n.closer,
+		cache: scopeCache{
+			tagged: make(map[string]*Scope),
+		},
+	}
+	n.cache.taggedMu.Lock()
+	n.cache.tagged[key] = s
+	n.cache.taggedMu.Unlock()
+	return s
 }
 
 // Close closes the scope and stops reporting.
@@ -71,14 +139,35 @@ func (n *Scope) Close() error {
 // or other events that are incremented by one each time.
 //
 // RecordHit adds the "_total" suffix to the name of the measurement.
-func (n *Scope) RecordHit(measurement string, tags map[string]string) {
-	record := n.scope.Tagged(tags).Counter(SnakeCasef(measurement + "_total"))
-	record.Inc(1.0)
+//
+// Measurement type: Counter
+func (n *Scope) RecordHit(measurement string) {
+	n.RecordIncrementValue(measurement, 1)
 }
 
-func (n *Scope) RecordIncrementValue(measurement string, tags map[string]string, value int64) {
-	record := n.scope.Tagged(tags).Counter(SnakeCasef(measurement + "_total"))
-	record.Inc(value)
+// RecordIncrementValue increases a counter.
+//
+// RecordIncrementValue adds the "_total" suffix to the name of the measurement.
+//
+// Measurement type: Counter
+func (n *Scope) RecordIncrementValue(measurement string, value int64) {
+	var scope tally.Counter
+	var ok bool
+	n.cache.counterMu.RLock()
+	if n.cache.counter != nil {
+		scope, ok = n.cache.counter[measurement]
+	}
+	n.cache.counterMu.RUnlock()
+	if !ok {
+		n.cache.counterMu.Lock()
+		if n.cache.counter == nil {
+			n.cache.counter = make(map[string]tally.Counter)
+		}
+		scope = n.scope.Counter(SnakeCasef(measurement + "_total"))
+		n.cache.counter[measurement] = scope
+		n.cache.counterMu.Unlock()
+	}
+	scope.Inc(value)
 }
 
 // RecordGauge sets the value of a measurement that can go up or down over
@@ -86,9 +175,26 @@ func (n *Scope) RecordIncrementValue(measurement string, tags map[string]string,
 //
 // RecordGauge measures a prometheus raw type and no suffix is added to the
 // measurement.
-func (n *Scope) RecordGauge(measurement string, tags map[string]string, value float64) {
-	record := n.scope.Tagged(tags).Gauge(SnakeCasef(measurement))
-	record.Update(value)
+//
+// Measurement type: Gauge
+func (n *Scope) RecordGauge(measurement string, value float64) {
+	var scope tally.Gauge
+	var ok bool
+	n.cache.gaugeMu.RLock()
+	if n.cache.gauge != nil {
+		scope, ok = n.cache.gauge[measurement]
+	}
+	n.cache.gaugeMu.RUnlock()
+	if !ok {
+		n.cache.gaugeMu.Lock()
+		if n.cache.gauge == nil {
+			n.cache.gauge = make(map[string]tally.Gauge)
+		}
+		scope = n.scope.Gauge(SnakeCasef(measurement))
+		n.cache.gauge[measurement] = scope
+		n.cache.gaugeMu.Unlock()
+	}
+	scope.Update(value)
 }
 
 // RecordSize records a numeric unit-less value that can go up or down. Use it
@@ -96,8 +202,10 @@ func (n *Scope) RecordGauge(measurement string, tags map[string]string, value fl
 // to measure things like the size of a queue.
 //
 // RecordSize adds the "_size" prefix to the name of the measurement.
-func (n *Scope) RecordSize(measurement string, tags map[string]string, value float64) {
-	n.RecordGauge(SnakeCasef(measurement+"_size"), tags, value)
+//
+// Measurement type: Gauge
+func (n *Scope) RecordSize(measurement string, value float64) {
+	n.RecordGauge(measurement+"_size", value)
 }
 
 // RecordIntegerValue records a numeric unit-less value that can go up or down.
@@ -105,28 +213,46 @@ func (n *Scope) RecordSize(measurement string, tags map[string]string, value flo
 //
 // RecordIntegerValue uses an histogram configured with buckets that priorize
 // values closer to zero.
-func (n *Scope) RecordIntegerValue(measurement string, tags map[string]string, value int) {
-	record := n.scope.Tagged(tags).
-		Histogram(SnakeCasef(measurement+"_value"), defaultBucketsForIntegerValues)
-	record.RecordValue(float64(value))
+//
+// Measurement type: Histogram
+func (n *Scope) RecordIntegerValue(measurement string, value int) {
+	n.RecordValueWithBuckets(measurement, float64(value), defaultBucketsForIntegerValues)
 }
 
 // RecordValue records a numeric unit-less value that can go up or down. Use it
 // when is important to see how the value evolved over time.
 //
 // RecordValue measures a prometheus raw type and no suffix is added to the measurement.
-func (n *Scope) RecordValue(measurement string, tags map[string]string, value float64) {
-	n.RecordValueWithBuckets(SnakeCasef(measurement), tags, value, nil)
+//
+// Measurement type: Histogram
+func (n *Scope) RecordValue(measurement string, value float64) {
+	n.RecordValueWithBuckets(measurement, value, nil)
 }
 
 // RecordValueWithBuckets records a numeric unit-less value that can go up or
 // down. Use it when is important to see how the value evolved over time.
 //
 // RecordValueWithBuckets adds the "_value" suffix to the name of the measurement.
-func (n *Scope) RecordValueWithBuckets(measurement string, tags map[string]string, value float64, buckets []float64) {
-	record := n.scope.Tagged(tags).
-		Histogram(SnakeCasef(measurement+"_value"), tally.ValueBuckets(buckets))
-	record.RecordValue(value)
+//
+// Measurement type: Histogram
+func (n *Scope) RecordValueWithBuckets(measurement string, value float64, buckets []float64) {
+	var scope tally.Histogram
+	var ok bool
+	n.cache.histogramMu.RLock()
+	if n.cache.histogram != nil {
+		scope, ok = n.cache.histogram[measurement]
+	}
+	n.cache.histogramMu.RUnlock()
+	if !ok {
+		n.cache.histogramMu.Lock()
+		if n.cache.histogram == nil {
+			n.cache.histogram = make(map[string]tally.Histogram)
+		}
+		scope = n.scope.Histogram(SnakeCasef(measurement+"_value"), tally.ValueBuckets(buckets))
+		n.cache.histogram[measurement] = scope
+		n.cache.histogramMu.Unlock()
+	}
+	scope.RecordValue(value)
 }
 
 // RecordDuration records an elapsed time. Use it when is important to see how
@@ -135,8 +261,10 @@ func (n *Scope) RecordValueWithBuckets(measurement string, tags map[string]strin
 //
 // RecordDuration adds the "_duration_seconds" prefix to the name of the
 // measurement.
-func (n *Scope) RecordDuration(measurement string, tags map[string]string, start time.Time, stop time.Time) {
-	n.RecordDurationWithResolution(SnakeCasef(measurement), tags, start, stop, 0)
+//
+// Measurement type: Histogram
+func (n *Scope) RecordDuration(measurement string, start time.Time, stop time.Time) {
+	n.RecordDurationWithResolution(measurement, start, stop, 0)
 }
 
 // RecordDurationWithResolution records the elapsed duration between two time
@@ -148,45 +276,84 @@ func (n *Scope) RecordDuration(measurement string, tags map[string]string, start
 //
 // RecordDurationWithResolution adds the "_duration_seconds" prefix to the name
 // of the measurement.
-func (n *Scope) RecordDurationWithResolution(measurement string, tags map[string]string, timeA time.Time, timeB time.Time, resolution time.Duration) {
+//
+// Measurement type: Histogram
+func (n *Scope) RecordDurationWithResolution(measurement string, timeA time.Time, timeB time.Time, resolution time.Duration) {
 	var buckets tally.Buckets
-
+	var ok bool
 	if resolution <= 0 {
 		resolution = time.Second
 	}
 
-	unit := float64(resolution)
-	durations := make([]time.Duration, len(defaultBucketFactorsForDurations))
-	for i := range durations {
-		durations[i] = time.Duration(int64(unit * defaultBucketFactorsForDurations[i]))
+	n.cache.bucketsMu.RLock()
+	if n.cache.buckets != nil {
+		buckets, ok = n.cache.buckets[int64(resolution)]
 	}
-	buckets = tally.DurationBuckets(durations)
+	n.cache.bucketsMu.RUnlock()
+	if !ok {
+		unit := float64(resolution)
+		durations := make([]time.Duration, len(defaultBucketFactorsForDurations))
+		for i := range durations {
+			durations[i] = time.Duration(int64(unit * defaultBucketFactorsForDurations[i]))
+		}
+		buckets = tally.DurationBuckets(durations)
+		n.cache.bucketsMu.Lock()
+		if n.cache.buckets == nil {
+			n.cache.buckets = make(map[int64]tally.Buckets)
+		}
+		n.cache.buckets[int64(resolution)] = buckets
+		n.cache.bucketsMu.Unlock()
+	}
 
-	record := n.scope.Tagged(tags).Histogram(
-		SnakeCasef(measurement+"_duration_seconds"),
-		buckets,
-	)
+	var scope tally.Histogram
+	n.cache.histogramMu.RLock()
+	if n.cache.histogram != nil {
+		scope, ok = n.cache.histogram[measurement]
+	}
+	n.cache.histogramMu.RUnlock()
+	if !ok {
+		n.cache.histogramMu.Lock()
+		if n.cache.histogram == nil {
+			n.cache.histogram = make(map[string]tally.Histogram)
+		}
+		scope = n.scope.Histogram(SnakeCasef(measurement+"_duration_seconds"), buckets)
+		n.cache.histogram[measurement] = scope
+		n.cache.histogramMu.Unlock()
+	}
+
 	elapsed := timeB.Sub(timeA)
 	if elapsed < 0 {
 		elapsed = elapsed * -1
 	}
-	record.RecordDuration(elapsed)
+	scope.RecordDuration(elapsed)
 }
 
-func (n *Scope) RecordSpan(measurement string, tags map[string]string) tally.Stopwatch {
-	return n.scope.Timer(SnakeCasef(measurement + "_span")).Start()
-}
-
-func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope, io.Closer) {
-	opts.CachedReporter = reporter
-	opts.Separator = prometheus.DefaultSeparator
-	opts.SanitizeOptions = &prometheus.DefaultSanitizerOpts
-	opts.OmitCardinalityMetrics = true
-	return tally.NewRootScope(opts, interval)
+// RecordSpan starts a stopwatch for a span.
+//
+// RecordSpan adds the "_span" suffix to the name of the measurement.
+//
+// Measurement type: Timer
+func (n *Scope) RecordSpan(measurement string) tally.Stopwatch {
+	var scope tally.Timer
+	var ok bool
+	n.cache.timerMu.RLock()
+	if n.cache.timer != nil {
+		scope, ok = n.cache.timer[measurement]
+	}
+	n.cache.timerMu.RUnlock()
+	if !ok {
+		n.cache.timerMu.Lock()
+		if n.cache.timer == nil {
+			n.cache.timer = make(map[string]tally.Timer)
+		}
+		scope = n.scope.Timer(SnakeCasef(measurement + "_span"))
+		n.cache.timer[measurement] = scope
+		n.cache.timerMu.Unlock()
+	}
+	return scope.Start()
 }
 
 func SnakeCasef(format string, args ...any) string {
-	// TODO: memoize..?
 	s := strings.ToLower(fmt.Sprintf(format, args...))
 	if strings.Contains(s, "-") {
 		s = strings.ReplaceAll(s, "-", "_")
@@ -198,4 +365,27 @@ func SnakeCasef(format string, args ...any) string {
 		s = strings.ReplaceAll(s, ".", "_")
 	}
 	return s
+}
+
+func newRootScope(opts tally.ScopeOptions, interval time.Duration) (tally.Scope, io.Closer) {
+	opts.CachedReporter = reporter
+	opts.Separator = prometheus.DefaultSeparator
+	opts.SanitizeOptions = nil // noop sanitizer
+	opts.OmitCardinalityMetrics = true
+	return tally.NewRootScope(opts, interval)
+}
+
+type scopeCache struct {
+	tagged      map[string]*Scope // map key is a unique identifier for the group of tags
+	taggedMu    sync.RWMutex
+	counter     map[string]tally.Counter
+	counterMu   sync.RWMutex
+	gauge       map[string]tally.Gauge
+	gaugeMu     sync.RWMutex
+	timer       map[string]tally.Timer
+	timerMu     sync.RWMutex
+	histogram   map[string]tally.Histogram
+	histogramMu sync.RWMutex
+	buckets     map[int64]tally.Buckets
+	bucketsMu   sync.RWMutex
 }
