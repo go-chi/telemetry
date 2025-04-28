@@ -125,6 +125,9 @@ func (n *Scope) SetTaggedScope(key string, tags map[string]string) *Scope {
 		},
 	}
 	n.cache.taggedMu.Lock()
+	if n.cache.tagged == nil {
+		n.cache.tagged = make(map[string]*Scope)
+	}
 	n.cache.tagged[key] = s
 	n.cache.taggedMu.Unlock()
 	return s
