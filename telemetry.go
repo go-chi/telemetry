@@ -94,9 +94,10 @@ func (n *Scope) Tagged(tagName, tagValue string) *Scope {
 	if tagName == "" || tagValue == "" {
 		return n
 	}
-	scope, _ := n.GetTaggedScope(tagName)
+	metricsKey := fmt.Sprintf("%s:%s", tagName, tagValue)
+	scope, _ := n.GetTaggedScope(metricsKey)
 	if scope == nil {
-		scope = n.SetTaggedScope(tagName, map[string]string{tagName: tagValue})
+		scope = n.SetTaggedScope(metricsKey, map[string]string{tagName: tagValue})
 	}
 	return scope
 }
