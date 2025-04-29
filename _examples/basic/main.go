@@ -25,11 +25,11 @@ type MyAppMetrics struct {
 }
 
 func (m *MyAppMetrics) RecordMyAppHit() {
-	m.RecordHit("my_app_hit", nil)
+	m.RecordHit("my_app_hit")
 }
 
 func (m *MyAppMetrics) RecordAppGauge(value float64) {
-	m.RecordGauge("my_app_gauge", nil, value)
+	m.RecordGauge("my_app_gauge", value)
 }
 
 func main() {
@@ -64,7 +64,7 @@ func main() {
 			w.Write([]byte("Gauge recorded!"))
 		})
 		r.Get("/compute", func(w http.ResponseWriter, r *http.Request) {
-			span := AppMetrics.RecordSpan("compute", nil)
+			span := AppMetrics.RecordSpan("compute")
 			defer span.Stop()
 
 			// do random work for random tie,,
