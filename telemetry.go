@@ -73,6 +73,7 @@ func NewScope(scope string, optTags ...map[string]string) *Scope {
 	return &Scope{
 		scope:  s,
 		closer: closer,
+		cache:  newScopeCache(),
 	}
 }
 
@@ -83,6 +84,7 @@ func (n *Scope) WithTaggedMap(tags map[string]string) *Scope {
 	return &Scope{
 		scope:  n.scope.Tagged(tags),
 		closer: n.closer,
+		cache:  newScopeCache(),
 	}
 }
 
@@ -108,9 +110,7 @@ func (n *Scope) GetTaggedScope(key string) (*Scope, bool) {
 	var scope *Scope
 	var ok bool
 	n.cache.taggedMu.RLock()
-	if n.cache.tagged != nil {
-		scope, ok = n.cache.tagged[key]
-	}
+	scope, ok = n.cache.tagged[key]
 	n.cache.taggedMu.RUnlock()
 	return scope, ok
 }
@@ -121,14 +121,9 @@ func (n *Scope) SetTaggedScope(key string, tags map[string]string) *Scope {
 	s := &Scope{
 		scope:  n.scope.Tagged(tags),
 		closer: n.closer,
-		cache: scopeCache{
-			tagged: make(map[string]*Scope),
-		},
+		cache:  newScopeCache(),
 	}
 	n.cache.taggedMu.Lock()
-	if n.cache.tagged == nil {
-		n.cache.tagged = make(map[string]*Scope)
-	}
 	n.cache.tagged[key] = s
 	n.cache.taggedMu.Unlock()
 	return s
@@ -158,15 +153,10 @@ func (n *Scope) RecordIncrementValue(measurement string, value int64) {
 	var scope tally.Counter
 	var ok bool
 	n.cache.counterMu.RLock()
-	if n.cache.counter != nil {
-		scope, ok = n.cache.counter[measurement]
-	}
+	scope, ok = n.cache.counter[measurement]
 	n.cache.counterMu.RUnlock()
 	if !ok {
 		n.cache.counterMu.Lock()
-		if n.cache.counter == nil {
-			n.cache.counter = make(map[string]tally.Counter)
-		}
 		scope = n.scope.Counter(SnakeCasef(measurement + "_total"))
 		n.cache.counter[measurement] = scope
 		n.cache.counterMu.Unlock()
@@ -185,15 +175,10 @@ func (n *Scope) RecordGauge(measurement string, value float64) {
 	var scope tally.Gauge
 	var ok bool
 	n.cache.gaugeMu.RLock()
-	if n.cache.gauge != nil {
-		scope, ok = n.cache.gauge[measurement]
-	}
+	scope, ok = n.cache.gauge[measurement]
 	n.cache.gaugeMu.RUnlock()
 	if !ok {
 		n.cache.gaugeMu.Lock()
-		if n.cache.gauge == nil {
-			n.cache.gauge = make(map[string]tally.Gauge)
-		}
 		scope = n.scope.Gauge(SnakeCasef(measurement))
 		n.cache.gauge[measurement] = scope
 		n.cache.gaugeMu.Unlock()
@@ -243,15 +228,10 @@ func (n *Scope) RecordValueWithBuckets(measurement string, value float64, bucket
 	var scope tally.Histogram
 	var ok bool
 	n.cache.histogramMu.RLock()
-	if n.cache.histogram != nil {
-		scope, ok = n.cache.histogram[measurement]
-	}
+	scope, ok = n.cache.histogram[measurement]
 	n.cache.histogramMu.RUnlock()
 	if !ok {
 		n.cache.histogramMu.Lock()
-		if n.cache.histogram == nil {
-			n.cache.histogram = make(map[string]tally.Histogram)
-		}
 		scope = n.scope.Histogram(SnakeCasef(measurement+"_value"), tally.ValueBuckets(buckets))
 		n.cache.histogram[measurement] = scope
 		n.cache.histogramMu.Unlock()
@@ -283,45 +263,42 @@ func (n *Scope) RecordDuration(measurement string, start time.Time, stop time.Ti
 //
 // Measurement type: Histogram
 func (n *Scope) RecordDurationWithResolution(measurement string, timeA time.Time, timeB time.Time, resolution time.Duration) {
-	var buckets tally.Buckets
-	var ok bool
 	if resolution <= 0 {
 		resolution = time.Second
 	}
 
+	var buckets tally.Buckets
+	var ok bool
+	resKey := int64(resolution)
+
 	n.cache.bucketsMu.RLock()
-	if n.cache.buckets != nil {
-		buckets, ok = n.cache.buckets[int64(resolution)]
-	}
+	buckets, ok = n.cache.buckets[resKey]
 	n.cache.bucketsMu.RUnlock()
+
 	if !ok {
 		unit := float64(resolution)
 		durations := make([]time.Duration, len(defaultBucketFactorsForDurations))
 		for i := range durations {
 			durations[i] = time.Duration(int64(unit * defaultBucketFactorsForDurations[i]))
 		}
-		buckets = tally.DurationBuckets(durations)
+		calculatedBuckets := tally.DurationBuckets(durations)
+
 		n.cache.bucketsMu.Lock()
-		if n.cache.buckets == nil {
-			n.cache.buckets = make(map[int64]tally.Buckets)
-		}
-		n.cache.buckets[int64(resolution)] = buckets
+		buckets = calculatedBuckets
+		n.cache.buckets[resKey] = buckets
 		n.cache.bucketsMu.Unlock()
 	}
 
 	var scope tally.Histogram
+	metricsKey := fmt.Sprintf("%s:%d", measurement, resKey)
+
 	n.cache.histogramMu.RLock()
-	if n.cache.histogram != nil {
-		scope, ok = n.cache.histogram[measurement]
-	}
+	scope, ok = n.cache.histogram[metricsKey]
 	n.cache.histogramMu.RUnlock()
 	if !ok {
 		n.cache.histogramMu.Lock()
-		if n.cache.histogram == nil {
-			n.cache.histogram = make(map[string]tally.Histogram)
-		}
 		scope = n.scope.Histogram(SnakeCasef(measurement+"_duration_seconds"), buckets)
-		n.cache.histogram[measurement] = scope
+		n.cache.histogram[metricsKey] = scope
 		n.cache.histogramMu.Unlock()
 	}
 
@@ -341,15 +318,10 @@ func (n *Scope) RecordSpan(measurement string) tally.Stopwatch {
 	var scope tally.Timer
 	var ok bool
 	n.cache.timerMu.RLock()
-	if n.cache.timer != nil {
-		scope, ok = n.cache.timer[measurement]
-	}
+	scope, ok = n.cache.timer[measurement]
 	n.cache.timerMu.RUnlock()
 	if !ok {
 		n.cache.timerMu.Lock()
-		if n.cache.timer == nil {
-			n.cache.timer = make(map[string]tally.Timer)
-		}
 		scope = n.scope.Timer(SnakeCasef(measurement + "_span"))
 		n.cache.timer[measurement] = scope
 		n.cache.timerMu.Unlock()
@@ -392,4 +364,15 @@ type scopeCache struct {
 	histogramMu sync.RWMutex
 	buckets     map[int64]tally.Buckets
 	bucketsMu   sync.RWMutex
+}
+
+func newScopeCache() scopeCache {
+	return scopeCache{
+		tagged:    make(map[string]*Scope),
+		counter:   make(map[string]tally.Counter),
+		gauge:     make(map[string]tally.Gauge),
+		timer:     make(map[string]tally.Timer),
+		histogram: make(map[string]tally.Histogram),
+		buckets:   make(map[int64]tally.Buckets),
+	}
 }
