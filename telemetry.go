@@ -105,7 +105,7 @@ func (n *Scope) Tagged(tagName, tagValue string) *Scope {
 }
 
 // GetTaggedScope returns a new scope with the given tags based on the
-// supplied key identifer.
+// supplied key identifier.
 func (n *Scope) GetTaggedScope(key string) (*Scope, bool) {
 	var scope *Scope
 	var ok bool
@@ -116,7 +116,7 @@ func (n *Scope) GetTaggedScope(key string) (*Scope, bool) {
 }
 
 // SetTaggedScope returns a new scope with the given tags based on the
-// supplied key identifer.
+// supplied key identifier.
 func (n *Scope) SetTaggedScope(key string, tags map[string]string) *Scope {
 	s := &Scope{
 		scope:  n.scope.Tagged(tags),
